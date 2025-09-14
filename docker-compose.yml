@@ -1,0 +1,96 @@
+services:
+  # MongoDB база данных
+  mongodb:
+    image: mongo:7.0
+    container_name: aman-kuzov-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password123
+      MONGO_INITDB_DATABASE: aman_kuzov
+    volumes:
+      - mongodb_data:/data/db
+      - ./mongo-init:/docker-entrypoint-initdb.d
+    networks:
+      - aman-kuzov-network
+
+  # Python AI API сервис
+  python-ai:
+    build:
+      context: ./backend-1/python-ai
+      dockerfile: Dockerfile
+    container_name: aman-kuzov-python-ai
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+    volumes:
+      - ./backend-1/python-ai:/app
+      - python_cache:/root/.cache
+    networks:
+      - aman-kuzov-network
+    depends_on:
+      - mongodb
+
+  # Node.js Backend API
+  nodejs-backend:
+    build:
+      context: ./backend-1/backend
+      dockerfile: Dockerfile
+    container_name: aman-kuzov-backend
+    restart: unless-stopped
+    ports:
+      - "1015:1015"
+    environment:
+      - NODE_ENV=production
+      - PORT=1015
+      - MONGODB_URI=mongodb://admin:password123@mongodb:27017/aman_kuzov?authSource=admin
+      - CORS_ORIGIN=http://localhost:3000
+    volumes:
+      - ./backend-1/backend/uploads:/app/uploads
+      - ./backend-1/backend:/app
+      - /app/node_modules
+    networks:
+      - aman-kuzov-network
+    depends_on:
+      - mongodb
+      - python-ai
+
+  # React Frontend
+  react-frontend:
+    build:
+      context: ./aman-kuzov-frontend
+      dockerfile: Dockerfile
+    container_name: aman-kuzov-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:1015
+      - REACT_APP_PYTHON_AI_URL=http://localhost:8000
+      - CHOKIDAR_USEPOLLING=true
+    volumes:
+      - ./aman-kuzov-frontend:/app
+      - /app/node_modules
+    networks:
+      - aman-kuzov-network
+    depends_on:
+      - nodejs-backend
+      - python-ai
+
+# Сети
+networks:
+  aman-kuzov-network:
+    driver: bridge
+
+# Тома для постоянного хранения данных
+volumes:
+  mongodb_data:
+    driver: local
+  python_cache:
+    driver: local
+
